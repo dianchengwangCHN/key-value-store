@@ -235,6 +235,13 @@ bool MP1Node::recvCallBack(void *env, char *data, int size) {
   /*
    * Your code goes here
    */
+  MessageHdr *message = (MessageHdr *)malloc(size * sizeof(char));
+  memcpy(message, data, sizeof(MessageHdr));
+
+  if (message->msgType == JOINREQ) {
+  } else if (message->msgType == JOINREP) {
+  } else if (message->msgType == HEARTBEAT) {
+  }
 }
 
 /**
@@ -247,6 +254,53 @@ void MP1Node::nodeLoopOps() {
   /*
    * Your code goes here
    */
+  // Check if any node in memberList failed
+  long now = par->getcurrtime();
+  for (auto i = memberNode->memberList.begin();
+       i != memberNode->memberList.end(); i++) {
+    long timeStamp = i->gettimestamp();
+    Address memberAddr;
+    memberAddr = getMemberAddress(i->getid, i->getport);
+    if (timeStamp - now > TFAIL + TREMOVE) {
+      i = memberNode->memberList.erase(i);
+
+#ifdef DEBUGLOG
+      log->logNodeRemove(&memberNode->addr, &memberAddr);
+#endif
+    }
+  }
+  // Send heartbeat messages periodically
+  memberNode->pingCounter--;
+  if (memberNode->pingCounter == 0) {
+    memberNode->heartbeat++;
+    // Send heartbeat messages to members in memberList
+    for (auto i = memberNode->memberList.begin();
+         i != memberNode->memberList.end(); i++) {
+      Address memberAddr;
+      memberAddr = getMemberAddress(i->getid, i->getport);
+
+      long timeStamp = i->gettimestamp();
+
+      if (!(now - timeStamp > TFAIL || memberAddr == memberNode->addr)) {
+        // create HEARTBEAT message
+        MessageHdr *msg;
+        size_t msgsize =
+            sizeof(MessageHdr) + sizeof(memberAddr.addr) + sizeof(long) + 1;
+        msg = (MessageHdr *)malloc(msgsize * sizeof(char));
+
+        msg->msgType = HEARTBEAT;
+        memcpy((char *)(msg + 1), &memberNode->addr.addr,
+               sizeof(memberNode->addr.addr));
+        memcpy((char *)(msg + 1) + 1 + sizeof(memberNode->addr.addr),
+               &memberNode->heartbeat, sizeof(long));
+
+        // send HEARTBEAT message to the member
+        emulNet->ENsend(&memberNode->addr, &memberAddr, (char *)msg, msgsize);
+        free(msg);
+      }
+    }
+    memberNode->pingCounter = TFAIL;
+  }
 
   return;
 }
@@ -273,6 +327,21 @@ Address MP1Node::getJoinAddress() {
   *(short *)(&joinaddr.addr[4]) = 0;
 
   return joinaddr;
+}
+
+/**
+ * FUNCTION NAME: getMemberAddress
+ *
+ * DESCRIPTION: Returns the Address of the member with given id and port
+ */
+Address MP1Node::getMemberAddress(int id, int port) {
+  Address memberAddr;
+
+  memset(&memberAddr, 0, sizeof(Address));
+  *(int *)(&memberAddr.addr) = id;
+  *(short *)(&memberAddr.addr[4]) = port;
+
+  return memberAddr;
 }
 
 /**
