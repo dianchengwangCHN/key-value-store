@@ -239,9 +239,39 @@ bool MP1Node::recvCallBack(void *env, char *data, int size) {
   memcpy(message, data, sizeof(MessageHdr));
 
   if (message->msgType == JOINREQ) {
+    // Parse message
+    size_t offset = sizeof(MessageHdr);
+    int id;
+    short port;
+    memcpy(&id, data + offset, sizeof(int));
+    offset += sizeof(int);
+    memcpy(&port, data + offset, sizeof(short));
+    offset += sizeof(short);
+    Address nodeAddr = getMemberAddress(id, port);
+    for (auto i = memberNode->memberList.begin();
+         i != memberNode->memberList.end(); i++) {
+      Address memberAddr = getMemberAddress(i->getid(), i->getport());
+      if (memberAddr == nodeAddr) {
+        return false;
+      }
+    }
+    sendJoinResponse(&nodeAddr);
+    long heartbeat;
+    memcpy(&heartbeat, data + offset, sizeof(long));
+    MemberListEntry *newMember =
+        new MemberListEntry(id, port, heartbeat, par->getcurrtime());
+    memberNode->memberList.push_back(*newMember);
   } else if (message->msgType == JOINREP) {
+    // Parse membership list from message
+
+    // Update membership list
+
+    memberNode->inGroup = true;
   } else if (message->msgType == HEARTBEAT) {
+    // Parse message
   }
+
+  return true;
 }
 
 /**
@@ -259,8 +289,7 @@ void MP1Node::nodeLoopOps() {
   for (auto i = memberNode->memberList.begin();
        i != memberNode->memberList.end(); i++) {
     long timeStamp = i->gettimestamp();
-    Address memberAddr;
-    memberAddr = getMemberAddress(i->getid, i->getport);
+    Address memberAddr = getMemberAddress(i->getid(), i->getport());
     if (timeStamp - now > TFAIL + TREMOVE) {
       i = memberNode->memberList.erase(i);
 
@@ -276,8 +305,7 @@ void MP1Node::nodeLoopOps() {
     // Send heartbeat messages to members in memberList
     for (auto i = memberNode->memberList.begin();
          i != memberNode->memberList.end(); i++) {
-      Address memberAddr;
-      memberAddr = getMemberAddress(i->getid, i->getport);
+      Address memberAddr = getMemberAddress(i->getid(), i->getport());
 
       long timeStamp = i->gettimestamp();
 
@@ -309,7 +337,7 @@ int MP1Node::sendHeartbeat(Address *dstAddr) {
   memcpy((char *)(msg + 1) + sizeof(memberNode->addr.addr),
          &memberNode->heartbeat, sizeof(long));
 
-  // send HEARTBEAT message to the member
+  // send HEARTBEAT message to the dstAddr
   emulNet->ENsend(&memberNode->addr, dstAddr, (char *)msg, msgsize);
   free(msg);
 
@@ -352,7 +380,7 @@ int MP1Node::sendJoinResponse(Address *dstAddr) {
     offset += sizeof(long);
   }
 
-  // send HEARTBEAT message to the member
+  // send message to the dstAddr
   emulNet->ENsend(&memberNode->addr, dstAddr, (char *)msg, msgsize);
   free(msg);
 
