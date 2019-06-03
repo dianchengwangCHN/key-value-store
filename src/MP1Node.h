@@ -66,6 +66,8 @@ class MP1Node {
   void checkMessages();
   bool recvCallBack(void *env, char *data, int size);
   void nodeLoopOps();
+  int sendHeartbeat(Address *dstAddr);
+  int sendJoinResponse(Address *dstAddr);
   int isNullAddress(Address *addr);
   Address getJoinAddress();
   Address getMemberAddress(int id, int port);

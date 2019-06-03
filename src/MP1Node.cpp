@@ -282,27 +282,81 @@ void MP1Node::nodeLoopOps() {
       long timeStamp = i->gettimestamp();
 
       if (!(now - timeStamp > TFAIL || memberAddr == memberNode->addr)) {
-        // create HEARTBEAT message
-        MessageHdr *msg;
-        size_t msgsize =
-            sizeof(MessageHdr) + sizeof(memberAddr.addr) + sizeof(long) + 1;
-        msg = (MessageHdr *)malloc(msgsize * sizeof(char));
-
-        msg->msgType = HEARTBEAT;
-        memcpy((char *)(msg + 1), &memberNode->addr.addr,
-               sizeof(memberNode->addr.addr));
-        memcpy((char *)(msg + 1) + 1 + sizeof(memberNode->addr.addr),
-               &memberNode->heartbeat, sizeof(long));
-
-        // send HEARTBEAT message to the member
-        emulNet->ENsend(&memberNode->addr, &memberAddr, (char *)msg, msgsize);
-        free(msg);
+        // send HEARTBEAT message
+        sendHeartbeat(&memberAddr);
       }
     }
     memberNode->pingCounter = TFAIL;
   }
 
   return;
+}
+
+/**
+ * FUNCTION NAME: sendHeartbeat
+ *
+ * DESCRIPTION: Function sends heatbeat to dstAddr
+ */
+int MP1Node::sendHeartbeat(Address *dstAddr) {
+  MessageHdr *msg;
+  size_t msgsize =
+      sizeof(MessageHdr) + sizeof(memberNode->addr.addr) + sizeof(long);
+  msg = (MessageHdr *)malloc(msgsize * sizeof(char));
+
+  msg->msgType = HEARTBEAT;
+  memcpy((char *)(msg + 1), &memberNode->addr.addr,
+         sizeof(memberNode->addr.addr));
+  memcpy((char *)(msg + 1) + sizeof(memberNode->addr.addr),
+         &memberNode->heartbeat, sizeof(long));
+
+  // send HEARTBEAT message to the member
+  emulNet->ENsend(&memberNode->addr, dstAddr, (char *)msg, msgsize);
+  free(msg);
+
+  return 0;
+}
+
+/**
+ * FUNCTION NAME: sendJoinResponse
+ *
+ * DESCRIPTION: Function send response to JOINREQ
+ */
+int MP1Node::sendJoinResponse(Address *dstAddr) {
+  MessageHdr *msg;
+  size_t entrySize = sizeof(int) + sizeof(short) + 2 * sizeof(long);
+  int size = memberNode->memberList.size() + 1;
+  size_t msgsize = sizeof(MessageHdr) + sizeof(int) + size * entrySize;
+  msg = (MessageHdr *)malloc(msgsize * sizeof(char));
+
+  msg->msgType = JOINREP;
+  memcpy((char *)(msg + 1), &size, sizeof(int));
+  int offset = sizeof(int);
+  memcpy((char *)(msg + 1) + offset, &memberNode->addr.addr, sizeof(char) * 6);
+  offset += sizeof(char) * 6;
+  memcpy((char *)(msg + 1) + offset, &memberNode->heartbeat, sizeof(long));
+  offset += sizeof(long);
+  memcpy((char *)(msg + 1) + offset, &par->globaltime, sizeof(long));
+  offset += sizeof(long);
+  for (auto i = memberNode->memberList.begin();
+       i != memberNode->memberList.end(); i++) {
+    memcpy((char *)(msg + 1) + offset, &i->id, sizeof(int));
+    offset += sizeof(int);
+
+    memcpy((char *)(msg + 1) + offset, &i->port, sizeof(short));
+    offset += sizeof(short);
+
+    memcpy((char *)(msg + 1) + offset, &i->heartbeat, sizeof(long));
+    offset += sizeof(long);
+
+    memcpy((char *)(msg + 1) + offset, &i->timestamp, sizeof(long));
+    offset += sizeof(long);
+  }
+
+  // send HEARTBEAT message to the member
+  emulNet->ENsend(&memberNode->addr, dstAddr, (char *)msg, msgsize);
+  free(msg);
+
+  return 0;
 }
 
 /**
