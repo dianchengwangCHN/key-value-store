@@ -413,13 +413,13 @@ int MP1Node::sendHeartbeat(Address *dstAddr) {
 
   // send HEARTBEAT message to the dstAddr
   emulNet->ENsend(&memberNode->addr, dstAddr, (char *)msg, msgsize);
-#ifdef DEBUGLOG
-  static char s[1024];
-  sprintf(s, "send to: %d:%d:%d:%d:%d at time %d", dstAddr->addr[0],
-          dstAddr->addr[1], dstAddr->addr[2], dstAddr->addr[3],
-          *(short *)&dstAddr->addr[4], par->getcurrtime());
-  log->LOG(&memberNode->addr, s);
-#endif
+  // #ifdef DEBUGLOG
+  //   static char s[1024];
+  //   sprintf(s, "send to: %d:%d:%d:%d:%d at time %d", dstAddr->addr[0],
+  //           dstAddr->addr[1], dstAddr->addr[2], dstAddr->addr[3],
+  //           *(short *)&dstAddr->addr[4], par->getcurrtime());
+  //   log->LOG(&memberNode->addr, s);
+  // #endif
   free(msg);
 
   return 0;
