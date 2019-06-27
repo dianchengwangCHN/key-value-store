@@ -255,9 +255,6 @@ bool MP2Node::createKeyValue(string key, string value, ReplicaType replica) {
    * Implement this
    */
   // Insert key, value, replicaType into the hash table
-  if (ht->read(key) != "") {
-    return false;
-  }
   return ht->create(key, value);
 }
 
@@ -348,9 +345,9 @@ void MP2Node::checkMessages() {
      */
     switch (recvMsg.type) {
       case CREATE: {
-        bool success =
-            createKeyValue(recvMsg.key, recvMsg.value, recvMsg.replica);
         if (recvMsg.transID != STABLE) {
+          bool success =
+              createKeyValue(recvMsg.key, recvMsg.value, recvMsg.replica);
           if (success) {
             log->logCreateSuccess(&memberNode->addr, false, recvMsg.transID,
                                   recvMsg.key, recvMsg.value);
@@ -359,6 +356,10 @@ void MP2Node::checkMessages() {
                                recvMsg.key, recvMsg.value);
           }
           sendReply(recvMsg.transID, &recvMsg.fromAddr, REPLY, success, "");
+        } else {
+          if (ht->read(recvMsg.key) == "") {
+            createKeyValue(recvMsg.key, recvMsg.value, recvMsg.replica);
+          }
         }
         break;
       }
@@ -366,7 +367,7 @@ void MP2Node::checkMessages() {
         string value = readKey(recvMsg.key);
         if (value != "") {
           log->logReadSuccess(&memberNode->addr, false, recvMsg.transID,
-                              recvMsg.key, recvMsg.value);
+                              recvMsg.key, value);
         } else {
           log->logReadFail(&memberNode->addr, false, recvMsg.transID,
                            recvMsg.key);
@@ -417,8 +418,8 @@ void MP2Node::checkMessages() {
         Transaction *trans = transactions[recvMsg.transID];
         trans->replyCount++;
         if (recvMsg.value != "") {
-          trans->successCount++;
           trans->value = recvMsg.value;
+          trans->successCount++;
         }
         break;
       }
@@ -440,13 +441,16 @@ void MP2Node::checkMessages() {
 void MP2Node::checkTransactions() {
   for (auto i = transactions.begin(); i != transactions.end();) {
     Transaction *trans = i->second;
-    if (trans->replyCount == 3 ||
-        par->getcurrtime() - trans->timestamp > TFAIL) {
-      if (trans->successCount >= 2) {
-        coordinatorLog(true, trans->type, i->first, trans->key, trans->value);
-      } else {
-        coordinatorLog(false, trans->type, i->first, trans->key, trans->value);
-      }
+    bool complete = false;
+    if (trans->successCount >= 2) {
+      coordinatorLog(true, trans->type, i->first, trans->key, trans->value);
+      complete = true;
+    } else if (trans->replyCount - trans->successCount >= 2 ||
+               par->getcurrtime() - trans->timestamp > TFAIL) {
+      coordinatorLog(false, trans->type, i->first, trans->key, trans->value);
+      complete = true;
+    }
+    if (complete) {
       delete i->second;
       i = transactions.erase(i);
     } else {
